@@ -1,0 +1,30 @@
+# Dependencies and tool state
+node_modules/
+.wrangler/
+.cache/
+
+# Local environment and secrets
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary output
+tmp/
+temp/
+

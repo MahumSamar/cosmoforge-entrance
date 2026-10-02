@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CosmoForge — Mesh infrastructure that unites clouds</title>
+<script>
+/* Opt in before first paint so the entrance has no flash. Without JS, the page stays visible. */
+(function(){
+  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    document.documentElement.classList.add('entrance-active');
+  }
+})();
+</script>
+<style>
+@font-face{font-family:"Plex Sans";font-weight:400;font-display:block;src:url(assets/plex-sans-400.woff2) format("woff2")}
+@font-face{font-family:"Plex Sans";font-weight:500;font-display:block;src:url(assets/plex-sans-500.woff2) format("woff2")}
+@font-face{font-family:"Plex Sans";font-weight:600;font-display:block;src:url(assets/plex-sans-600.woff2) format("woff2")}
+@font-face{font-family:"Plex Mono";font-weight:400;font-display:block;src:url(assets/plex-mono-400.woff2) format("woff2")}
+
+/* ---------- Tokens (all sampled from the reference) ---------- */
+:root{
+  --orange:#C55733;
+  --ink:#000;
+  --text:#E4E4E4;
+  --nav-text:#DEDEDE;
+  --label:#CF5E3E;
+  --nav-line:#3d3d3d;
+  --rule:#ababab;
+  --vrule:#7c7c7c;
+  --cell-line:#2e2e2e;
+  --sans:"Plex Sans","IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --mono:"Plex Mono","IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  /* 1 design px. Desktop: exact 1px at 1280x720, scales with the viewport. */
+  --u:min(100vw / 1280, 100dvh / 720);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000}
+body{color:var(--text);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:geometricPrecision}
+a{color:inherit;text-decoration:none}
+a:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
+ul{list-style:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.stage{position:relative;isolation:isolate;overflow:hidden;background:#000}
+.bg{position:absolute;inset:0;z-index:-2;background:url(assets/asteroid.webp) 50% 50%/cover no-repeat;filter:saturate(0.883) brightness(0.890)}
+.scrim{position:absolute;z-index:-1;pointer-events:none}
+
+.brand{display:flex;align-items:center;font-family:var(--sans);font-weight:500;color:#F4F4F4}
+.brand svg{display:block;flex:none}
+.nav{display:flex}
+.nav a{position:relative;display:block;background:#000;border:1px solid var(--nav-line);font-family:var(--mono);font-weight:400;color:var(--nav-text);white-space:nowrap}
+.nav a::after{content:"";position:absolute;border-radius:50%;background:#fff}
+.nav a.cta{background:var(--orange);border-color:var(--orange);color:#200A02}
+.nav a.cta::after{background:#FBE7DE}
+.menu-btn{display:none;position:relative;flex:none;width:43.6px;height:43.6px;background:#000;border:1px solid var(--nav-line);color:var(--nav-text);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.menu-btn::after{content:"";position:absolute;top:5.8px;right:5.7px;width:3.6px;height:3.6px;border-radius:50%;background:#fff}
+.menu-btn i{position:absolute;left:6.5px;width:16px;height:1.4px;background:currentColor;transition:transform .18s ease,opacity .18s ease}
+.menu-btn i:nth-child(1){top:20.5px}.menu-btn i:nth-child(2){top:25.5px}.menu-btn i:nth-child(3){top:30.5px}
+.top.is-open .menu-btn i:nth-child(1){transform:translateY(5px) rotate(45deg)}
+.top.is-open .menu-btn i:nth-child(2){opacity:0}
+.top.is-open .menu-btn i:nth-child(3){transform:translateY(-5px) rotate(-45deg)}
+.menu-btn:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
+
+h1{font-family:var(--sans);font-weight:600;color:#F6F6F6;letter-spacing:0}
+.btns{display:flex}
+.btn{position:relative;display:flex;align-items:center;font-family:var(--mono);font-weight:400;text-transform:uppercase;white-space:nowrap}
+.btn .ar{position:absolute;top:0;bottom:0;right:0;display:grid;place-items:center}
+.btn .ar svg{display:block}
+.btn.light{background:#fff;color:#1E1E1E;border-style:solid;border-color:#fff}
+.btn.light .ar{background:var(--orange);color:#fff}
+.btn.solid{background:var(--orange);color:#FDEEE8;border-style:solid;border-color:var(--orange)}
+.btn.solid .ar{background:#000;color:#fff}
+
+.lbl{font-family:var(--mono);font-weight:400;color:var(--label);text-transform:uppercase;white-space:nowrap}
+.copy{font-family:var(--sans);font-weight:400;color:var(--text)}
+.caps li{position:relative;font-family:var(--mono);color:var(--text);white-space:nowrap}
+.caps li::before{content:"";position:absolute;border-radius:50%;background:var(--orange)}
+.strip ul{display:grid;grid-template-columns:repeat(8,1fr)}
+.strip li{display:grid;place-items:center;border-left:1px solid var(--cell-line)}
+.strip li:last-child{border-right:1px solid var(--cell-line)}
+.strip svg{display:block;color:#fff}
+
+/* =================== DESKTOP / LANDSCAPE : measured stage =================== */
+/* Desktop limit (content-derived): the stage scales by u = min(vw/1280, vh/720).
+   Below u = 0.85 (1088 x 612) body copy drops under 12.5px and nav/CTA targets under 37px,
+   and below a 6:5 aspect the header/footer split leaves an empty band. Only then does the
+   reflowed architecture take over. */
+@media (min-width:1088px) and (min-height:612px) and (min-aspect-ratio:6/5){
+  html,body{overflow:hidden}
+  .stage{width:100vw;height:100vh;height:100dvh}
+  .s-top{left:calc(-133.3*var(--u));top:calc(37.4*var(--u));width:calc(702.2*var(--u));height:calc(241.1*var(--u));background:radial-gradient(50% 50% at 50% 50%,rgba(0,0,0,0.907) 0.0%,rgba(0,0,0,0.865) 8.3%,rgba(0,0,0,0.822) 16.7%,rgba(0,0,0,0.776) 25.0%,rgba(0,0,0,0.729) 33.3%,rgba(0,0,0,0.678) 41.7%,rgba(0,0,0,0.624) 50.0%,rgba(0,0,0,0.565) 58.3%,rgba(0,0,0,0.501) 66.7%,rgba(0,0,0,0.429) 75.0%,rgba(0,0,0,0.345) 83.3%,rgba(0,0,0,0.237) 91.7%,rgba(0,0,0,0.000) 100.0%)}
+  .s-bot{left:0;bottom:0;width:calc(476.7*var(--u));height:calc(302.7*var(--u));background:linear-gradient(to right,rgba(0,0,0,1.000) 0.0%,rgba(0,0,0,0.941) 8.3%,rgba(0,0,0,0.880) 16.7%,rgba(0,0,0,0.817) 25.0%,rgba(0,0,0,0.753) 33.3%,rgba(0,0,0,0.686) 41.7%,rgba(0,0,0,0.616) 50.0%,rgba(0,0,0,0.542) 58.3%,rgba(0,0,0,0.464) 66.7%,rgba(0,0,0,0.379) 75.0%,rgba(0,0,0,0.285) 83.3%,rgba(0,0,0,0.176) 91.7%,rgba(0,0,0,0.000) 100.0%)}
+  .s-right{right:0;top:0;bottom:0;width:calc(414.4*var(--u));background:linear-gradient(to right,rgba(0,0,0,0.000) 0.0%,rgba(0,0,0,0.274) 8.3%,rgba(0,0,0,0.392) 16.7%,rgba(0,0,0,0.484) 25.0%,rgba(0,0,0,0.562) 33.3%,rgba(0,0,0,0.631) 41.7%,rgba(0,0,0,0.694) 50.0%,rgba(0,0,0,0.751) 58.3%,rgba(0,0,0,0.805) 66.7%,rgba(0,0,0,0.856) 75.0%,rgba(0,0,0,0.904) 83.3%,rgba(0,0,0,0.950) 91.7%,rgba(0,0,0,0.994) 100.0%)}
+  .s-flow{display:none}
+
+  .brand{position:absolute;left:calc(24*var(--u));top:calc(20*var(--u));gap:calc(7.2*var(--u));font-size:calc(16.8*var(--u));line-height:calc(28*var(--u));letter-spacing:calc(0.85*var(--u))}
+  .brand svg{width:calc(28*var(--u));height:calc(28*var(--u))}
+  .brand span{position:relative;top:calc(0.6*var(--u))}
+
+  .nav{position:absolute;right:calc(21.7*var(--u));top:calc(15.4*var(--u));gap:calc(3.7*var(--u))}
+  .nav a{height:calc(43.6*var(--u));font-size:calc(12*var(--u));line-height:1;padding:calc(26.1*var(--u)) 0 0 calc(4.7*var(--u))}
+  .nav a::after{width:calc(3.6*var(--u));height:calc(3.6*var(--u));top:calc(5.8*var(--u));right:calc(5.7*var(--u))}
+  .nav a:nth-child(1){width:calc(70.2*var(--u))}
+  .nav a:nth-child(2){width:calc(72.3*var(--u))}
+  .nav a:nth-child(3){width:calc(101.3*var(--u))}
+  .nav a:nth-child(4){width:calc(70.3*var(--u))}
+  .nav a:nth-child(5){width:calc(86*var(--u))}
+  .nav a:nth-child(6){width:calc(112.6*var(--u))}
+
+  h1 .w1{letter-spacing:calc(0.5*var(--u))} h1 .w2{letter-spacing:calc(-0.4*var(--u))} h1 .w3{letter-spacing:calc(1.67*var(--u));margin-left:calc(1*var(--u))} h1 .w4{letter-spacing:calc(0.74*var(--u));margin-left:calc(-2*var(--u))} h1 .w5{letter-spacing:calc(0*var(--u));margin-left:calc(1*var(--u))}
+  h1{position:absolute;left:calc(23.4*var(--u));top:calc(91.73*var(--u));font-size:calc(55.2*var(--u));line-height:calc(54*var(--u));letter-spacing:calc(0*var(--u));white-space:nowrap}
+
+  .btns{position:absolute;left:calc(24.7*var(--u));top:calc(216.4*var(--u));gap:calc(14.3*var(--u))}
+  .btn{height:calc(45.3*var(--u));border-width:calc(1.8*var(--u));font-size:calc(13*var(--u));letter-spacing:calc(0*var(--u));line-height:1}
+  .btn span{position:relative;top:calc(1.1*var(--u))}
+  .btn.light{width:calc(134.9*var(--u));padding-left:calc(7.5*var(--u))}
+  .btn.solid{width:calc(159.5*var(--u));padding-left:calc(11.1*var(--u))}
+  .btn .ar{width:calc(39*var(--u))}
+  .btn .ar svg{width:calc(12*var(--u));height:calc(9*var(--u));position:relative;top:calc(1.3*var(--u));left:calc(-0.8*var(--u))}
+  .btn.solid span{letter-spacing:calc(0.2*var(--u))}
+
+  .rule{position:absolute;left:calc(24.5*var(--u));right:calc(32.5*var(--u));bottom:calc(302.0*var(--u));height:calc(1*var(--u));background:var(--rule);box-shadow:0 calc(1*var(--u)) 0 rgba(255,255,255,.25),0 calc(-1*var(--u)) 0 rgba(255,255,255,.07)}
+  .vrule{position:absolute;left:calc(50% - 4*var(--u));width:calc(1*var(--u));min-width:1px;bottom:calc(7.4*var(--u));height:calc(295.6*var(--u));background:var(--vrule)}
+
+  .col-l{position:absolute;left:calc(25.5*var(--u));bottom:0;top:auto;height:calc(302.7*var(--u));width:calc(600*var(--u))}
+  .col-r{position:absolute;left:calc(50% + 20*var(--u));bottom:0;height:calc(302.7*var(--u));width:calc(600*var(--u))}
+  /* inside columns: y measured from divider (417.3) */
+  .col-l .lbl,.col-r .lbl{position:absolute;left:calc(-0.3*var(--u));top:calc(26.5*var(--u));font-size:calc(13.3*var(--u));line-height:1;letter-spacing:calc(0*var(--u))}
+  .copy{position:absolute;left:0;top:calc(45.3*var(--u));font-size:calc(14.7*var(--u));line-height:calc(19.5*var(--u));letter-spacing:calc(0*var(--u));white-space:nowrap}
+  .col-l .lbl.n{top:calc(169.06*var(--u))}
+  .caps{position:absolute;left:0;top:calc(187.56*var(--u))}
+  .caps li{height:calc(18.2*var(--u));line-height:calc(18.2*var(--u));padding-left:calc(17.5*var(--u));font-size:calc(13.45*var(--u));letter-spacing:calc(0.11*var(--u))}
+  .caps li::before{left:calc(-0.4*var(--u));top:calc(5.1*var(--u));width:calc(6.6*var(--u));height:calc(6.6*var(--u))}
+
+  .strip{position:absolute;left:calc(50% - 4*var(--u));right:calc(6.5*var(--u));bottom:calc(7.4*var(--u));height:calc(83.7*var(--u));border-top:calc(1*var(--u)) solid var(--cell-line);padding:0 calc(14.1*var(--u)) 0 calc(16*var(--u))}
+  .strip ul{height:100%;grid-template-columns:75.6fr 75.4fr 75.5fr 75.5fr 75.4fr 76.3fr 76.3fr 77.4fr}
+  .strip li{border-left-width:calc(1*var(--u))}
+  .strip li:last-child{border-right-width:calc(1*var(--u))}
+  .strip svg{width:calc(44*var(--u));height:calc(44*var(--u))}
+}
+
+/* =================== TABLET : reflowed architecture (below the desktop limit) ===================
+   Same components at their true desktop size (1 design px = 1 CSS px). The desktop
+   composition is kept as a grid: headline block on top, then the rule, then
+   [ left column | vertical rule | right column + logo strip ]. */
+@media not all and (min-width:1088px) and (min-height:612px) and (min-aspect-ratio:6/5){
+  :root{--u:calc(1px * var(--fit,1));--gutter:calc(24*var(--u))}
+  br.d{display:none}
+  .stage{overflow:visible;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;
+    padding:calc(env(safe-area-inset-top,0px) + calc(15.4*var(--u))) calc(env(safe-area-inset-right,0px) + var(--gutter)) calc(env(safe-area-inset-bottom,0px) + calc(7.4*var(--u))) calc(env(safe-area-inset-left,0px) + var(--gutter))}
+  .bg{background-position:50% 50%}
+  .s-top,.s-bot,.s-right{display:none}
+  .s-flow{inset:0;background:linear-gradient(180deg,rgba(0,0,0,.5) 0%,rgba(0,0,0,.18) 30%,rgba(0,0,0,.42) 58%,rgba(0,0,0,.78) 100%)}
+
+  /* header: logo + nav row, identical metrics to desktop */
+  .top{position:relative;z-index:10;display:flex;align-items:flex-start;justify-content:space-between;gap:calc(24*var(--u))}
+  .brand{margin-top:calc(4.6*var(--u));gap:calc(7.2*var(--u));font-size:calc(16.8*var(--u));line-height:calc(28*var(--u));letter-spacing:calc(.85*var(--u))}
+  .brand svg{width:calc(28*var(--u));height:calc(28*var(--u))}
+  .brand span{position:relative;top:calc(.6*var(--u))}
+  .menu-btn{width:calc(43.6*var(--u));height:calc(43.6*var(--u))}
+  .menu-btn::after{top:calc(5.8*var(--u));right:calc(5.7*var(--u));width:calc(3.6*var(--u));height:calc(3.6*var(--u))}
+  .menu-btn i{left:calc(6.5*var(--u));width:calc(16*var(--u));height:calc(1.4*var(--u))}
+  .menu-btn i:nth-child(1){top:calc(20.5*var(--u))}.menu-btn i:nth-child(2){top:calc(25.5*var(--u))}.menu-btn i:nth-child(3){top:calc(30.5*var(--u))}
+  .top.is-open .menu-btn i:nth-child(1){transform:translateY(calc(5*var(--u))) rotate(45deg)}
+  .top.is-open .menu-btn i:nth-child(3){transform:translateY(calc(-5*var(--u))) rotate(-45deg)}
+  .nav{gap:calc(3.7*var(--u))}
+  .nav a{height:calc(43.6*var(--u));font-size:calc(12*var(--u));line-height:1;padding:calc(26.1*var(--u)) 0 0 calc(4.7*var(--u))}
+  .nav a::after{width:calc(3.6*var(--u));height:calc(3.6*var(--u));top:calc(5.8*var(--u));right:calc(5.7*var(--u))}
+  .nav a:nth-child(1){width:calc(70.2*var(--u))}
+  .nav a:nth-child(2){width:calc(72.3*var(--u))}
+  .nav a:nth-child(3){width:calc(101.3*var(--u))}
+  .nav a:nth-child(4){width:calc(70.3*var(--u))}
+  .nav a:nth-child(5){width:calc(86*var(--u))}
+  .nav a:nth-child(6){width:calc(112.6*var(--u))}
+
+  /* hero: same type and the same vertical rhythm as desktop (header→h1 32.7, h1→CTAs 16.7) */
+  h1{margin-top:calc(32.7*var(--u));font-size:calc(55.2*var(--u));line-height:calc(54*var(--u))}
+  .btns{flex-wrap:wrap;gap:calc(12*var(--u)) calc(14.3*var(--u));margin-top:calc(16.7*var(--u))}
+  .btn{height:calc(45.3*var(--u));border-width:calc(1.8*var(--u));font-size:calc(13*var(--u));line-height:1}
+  .btn span{position:relative;top:calc(1.1*var(--u))}
+  .btn.light{width:calc(134.9*var(--u));padding-left:calc(7.5*var(--u))}
+  .btn.solid{width:calc(159.5*var(--u));padding-left:calc(11.1*var(--u))}
+  .btn.solid span{letter-spacing:calc(.2*var(--u))}
+  .btn .ar{width:calc(39*var(--u))}
+  .btn .ar svg{width:calc(12*var(--u));height:calc(9*var(--u));position:relative;top:calc(1.3*var(--u));left:calc(-.8*var(--u))}
+  .spacer{flex:1 1 auto;min-height:clamp(calc(24*var(--u)), 5vh - calc(4*var(--u)), calc(40*var(--u)))}
+  html.is-measuring .stage{min-height:0}
+  html.is-measuring .spacer{flex:none}
+
+  /* lower band */
+  .lower{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 1px minmax(0,1fr);
+    grid-template-rows:auto auto 1fr;grid-template-areas:"rule rule rule" "l v r" "l v s";column-gap:calc(24*var(--u))}
+  .lower::before{content:"";position:absolute;z-index:-1;pointer-events:none;top:0;bottom:calc(-7.4*var(--u));left:calc(-1 * var(--gutter));right:0;
+    background:linear-gradient(to right,rgba(0,0,0,.85) 0%,rgba(0,0,0,.45) 35%,rgba(0,0,0,0) 65%)}
+  .rule{grid-area:rule;height:1px;background:var(--rule);box-shadow:0 1px 0 rgba(255,255,255,.25),0 -1px 0 rgba(255,255,255,.07)}
+  .vrule{grid-area:v;width:1px;background:var(--vrule)}
+  .col-l{grid-area:l;padding-top:calc(26.5*var(--u))}
+  .col-r{grid-area:r;padding-top:calc(26.5*var(--u))}
+  .lbl{display:block;font-size:calc(13.3*var(--u));line-height:1}
+  .copy{margin-top:calc(5.5*var(--u));max-width:34em;font-size:calc(14.7*var(--u));line-height:calc(19.5*var(--u))}
+  .col-l .lbl.n{margin-top:calc(40*var(--u))}
+  .caps{margin-top:calc(5.2*var(--u))}
+  .caps li{height:calc(18.2*var(--u));line-height:calc(18.2*var(--u));padding-left:calc(18.5*var(--u));font-size:calc(13.45*var(--u));letter-spacing:calc(.11*var(--u))}
+  .caps li::before{left:calc(-.4*var(--u));top:calc(5.1*var(--u));width:calc(6.6*var(--u));height:calc(6.6*var(--u))}
+
+  /* logo strip: starts on the vertical rule and runs to calc(6.5*var(--u)) from the edge, like desktop.
+     It decides its own column count from the space it actually gets. */
+  .strip{grid-area:s;align-self:end;container-type:inline-size;margin:calc(32*var(--u)) calc(calc(6.5*var(--u)) - var(--gutter)) 0 calc(-24*var(--u));
+    border-top:1px solid var(--cell-line);padding:0 calc(14.1*var(--u)) 0 calc(16*var(--u))}
+  .strip ul{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .strip li{height:calc(83.7*var(--u))}
+  .strip li:nth-child(4n){border-right:1px solid var(--cell-line)}
+  .strip li:nth-child(n+5){border-top:1px solid var(--cell-line)}
+  .strip svg{width:calc(44*var(--u));height:calc(44*var(--u))}
+  @container (min-width:560px){
+    .strip ul{grid-template-columns:repeat(8,minmax(0,1fr))}
+    .strip li:nth-child(4n){border-right:0}
+    .strip li:last-child{border-right:1px solid var(--cell-line)}
+    .strip li:nth-child(n+5){border-top:0}
+  }
+}
+@media not all and (min-width:1088px) and (min-height:612px) and (min-aspect-ratio:6/5){
+  @media (orientation:portrait){.bg{background-position:38% 30%}}
+
+  /* Nav collapse: logo (calc(175*var(--u))) + calc(40*var(--u)) air + nav (calc(531*var(--u))) + margins stop fitting below calc(800*var(--u)) */
+  @media (max-width:799.98px){
+    .menu-btn{display:block}
+    .nav{position:absolute;top:calc(100% + calc(8*var(--u)));left:0;right:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+      background:#000;visibility:hidden;opacity:0;transform:translateY(calc(-6*var(--u)));
+      transition:opacity .18s ease,transform .18s ease,visibility 0s linear .18s}
+    .top.is-open .nav{visibility:visible;opacity:1;transform:none;transition:opacity .18s ease,transform .18s ease}
+    .nav a:nth-child(n){width:auto}
+  }
+
+  /* =================== MOBILE ===================
+     Two text columns fall under ~calc(290*var(--u)) (≈40 characters of calc(14.7*var(--u)) copy) below calc(680*var(--u)).
+     The left column goes full width; the right column and the strip keep their
+     relationship to the vertical rule, which now runs beside them. */
+  @media (max-width:679.98px){
+    :root{--gutter:calc(20*var(--u))}
+    h1{margin-top:calc(20*var(--u));font-size:calc(var(--fit,1) * clamp(28px, 10.8vw - 4.3px, 55.2px));line-height:.98}
+    .btns{margin-top:calc(16*var(--u))}
+    .spacer{min-height:calc(24*var(--u))}
+    .col-l{padding-top:calc(20*var(--u))}
+    .lbl{margin-bottom:0}
+    .strip li{height:calc(64*var(--u))}
+    .strip svg{width:calc(36*var(--u));height:calc(36*var(--u))}
+    .lower{grid-template-columns:1px minmax(0,1fr);column-gap:calc(16*var(--u));grid-template-rows:auto auto auto auto;
+      grid-template-areas:"rule rule" "l l" "v r" "v s"}
+    .col-r{padding-top:calc(22*var(--u))}
+    .col-l .lbl.n{margin-top:calc(22*var(--u))}
+    .strip{margin:calc(20*var(--u)) calc(calc(6.5*var(--u)) - var(--gutter)) 0 calc(-16*var(--u))}
+    .nav{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+}
+
+/* =================== ONE-TIME ENTRANCE ===================
+   A compact, foreground-only timeline. The asteroid and all scrims stay untouched. */
+.hero-line{display:block;overflow:hidden}
+.hero-line__inner{display:block}
+
+html.entrance-active .brand,
+html.entrance-active .menu-btn,
+html.entrance-active .nav a,
+html.entrance-active .hero-line__inner,
+html.entrance-active .btn,
+html.entrance-active .rule,
+html.entrance-active .vrule,
+html.entrance-active .col-l,
+html.entrance-active .col-r,
+html.entrance-active .strip{will-change:transform,opacity,clip-path}
+
+html.entrance-active .brand{animation:cf-header-in .68s cubic-bezier(.16,1,.3,1) .04s both}
+html.entrance-active .menu-btn{animation:cf-header-in .62s cubic-bezier(.16,1,.3,1) .18s both}
+html.entrance-active .nav a{animation:cf-nav-in .58s cubic-bezier(.16,1,.3,1) both}
+html.entrance-active .nav a:nth-child(1){animation-delay:.12s}
+html.entrance-active .nav a:nth-child(2){animation-delay:.17s}
+html.entrance-active .nav a:nth-child(3){animation-delay:.22s}
+html.entrance-active .nav a:nth-child(4){animation-delay:.27s}
+html.entrance-active .nav a:nth-child(5){animation-delay:.32s}
+html.entrance-active .nav a:nth-child(6){animation-delay:.37s}
+
+html.entrance-active .hero-line:first-child .hero-line__inner{animation:cf-type-in .92s cubic-bezier(.16,1,.3,1) .27s both}
+html.entrance-active .hero-line:last-child .hero-line__inner{animation:cf-type-in .92s cubic-bezier(.16,1,.3,1) .39s both}
+html.entrance-active .btn{animation:cf-action-in .68s cubic-bezier(.16,1,.3,1) both}
+html.entrance-active .btn:nth-child(1){animation-delay:.67s}
+html.entrance-active .btn:nth-child(2){animation-delay:.76s}
+
+html.entrance-active .rule{transform-origin:left center;animation:cf-rule-x .88s cubic-bezier(.65,0,.35,1) .79s both}
+html.entrance-active .vrule{transform-origin:center top;animation:cf-rule-y .74s cubic-bezier(.65,0,.35,1) .96s both}
+html.entrance-active .col-l{animation:cf-detail-in .72s cubic-bezier(.16,1,.3,1) .98s both}
+html.entrance-active .col-r{animation:cf-detail-in .72s cubic-bezier(.16,1,.3,1) 1.10s both}
+html.entrance-active .strip{animation:cf-strip-in .92s cubic-bezier(.16,1,.3,1) 1.22s both}
+
+@keyframes cf-header-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes cf-nav-in{from{opacity:0;transform:translateY(-6px);clip-path:inset(0 0 100% 0)}to{opacity:1;transform:none;clip-path:inset(0)}}
+@keyframes cf-type-in{from{opacity:0;transform:translateY(104%);clip-path:inset(0 0 100% 0)}to{opacity:1;transform:none;clip-path:inset(0)}}
+@keyframes cf-action-in{from{opacity:0;transform:translateY(10px) scale(.985);clip-path:inset(0 0 18% 0)}to{opacity:1;transform:none;clip-path:inset(0)}}
+@keyframes cf-rule-x{from{opacity:0;transform:scaleX(0)}to{opacity:1;transform:scaleX(1)}}
+@keyframes cf-rule-y{from{opacity:0;transform:scaleY(0)}to{opacity:1;transform:scaleY(1)}}
+@keyframes cf-detail-in{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+@keyframes cf-strip-in{from{opacity:0;transform:translateY(8px);clip-path:inset(0 100% 0 0)}to{opacity:1;transform:none;clip-path:inset(0)}}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="bg" role="img" aria-label="Close-up of a cratered asteroid lit from the upper left"></div>
+  <div class="scrim s-top"></div><div class="scrim s-bot"></div><div class="scrim s-right"></div><div class="scrim s-flow"></div>
+
+  <header class="top">
+    <a class="brand" href="#" aria-label="CosmoForge home">
+      <svg viewBox="2 2.2 24 24" fill="none" stroke="currentColor" stroke-width="1.35" overflow="visible" stroke-linecap="round" aria-hidden="true">
+        <circle cx="13.6" cy="15.2" r="10.9"/>
+        <path d="M19.9 1.9 3.1 23.9"/>
+        <path d="M25.4 10.2 9.2 26.9"/>
+        <circle cx="19.9" cy="1.9" r="0.9" fill="currentColor" stroke="none"/>
+        <circle cx="3.1" cy="23.9" r="0.9" fill="currentColor" stroke="none"/>
+        <circle cx="25.4" cy="10.2" r="0.9" fill="currentColor" stroke="none"/>
+        <circle cx="9.2" cy="26.9" r="0.9" fill="currentColor" stroke="none"/>
+      </svg>
+      <span>COSMOFORGE</span>
+    </a>
+    <button class="menu-btn" type="button" aria-expanded="false" aria-controls="primary-nav" aria-label="Open menu"><i></i><i></i><i></i></button>
+    <nav class="nav" id="primary-nav" aria-label="Primary">
+      <a href="#">Main</a><a href="#">News</a><a href="#">Blueprint</a><a href="#">Help</a><a href="#">Company</a><a class="cta" href="#">Plan a Call</a>
+    </nav>
+  </header>
+
+  <h1><span class="hero-line"><span class="hero-line__inner"><span class="w1">Mesh</span> <span class="w2">infrastructure</span></span></span><span class="hero-line"><span class="hero-line__inner"><span class="w3">that</span> <span class="w4">unites</span> <span class="w5">clouds</span></span></span></h1>
+
+  <div class="btns">
+    <a class="btn light" href="#"><span>Register</span><i class="ar"><svg viewBox="0 0 12 9" fill="none" stroke="currentColor" stroke-width="1.35" aria-hidden="true"><path d="M0 4.5h11M7.1.6l3.9 3.9-3.9 3.9"/></svg></i></a>
+    <a class="btn solid" href="#"><span>Plan a&nbsp;call</span><i class="ar"><svg viewBox="0 0 12 9" fill="none" stroke="currentColor" stroke-width="1.35" aria-hidden="true"><path d="M0 4.5h11M7.1.6l3.9 3.9-3.9 3.9"/></svg></i></a>
+  </div>
+
+  <div class="spacer"></div>
+  <section class="lower">
+    <div class="rule" role="presentation"></div>
+    <div class="vrule" role="presentation"></div>
+    <div class="col-l">
+      <h2 class="lbl">Discovering CosmoForge</h2>
+      <p class="copy">Tailored for code operators, our solution automates <br class="d">intelligent AI models to map, optimize, and validate <br class="d">deployment-ready workflows, coherently interfacing with tools <br class="d">with SQL, Iceberg, Flink, and the core of your cloud.</p>
+      <h2 class="lbl n">Native capabilities:</h2>
+      <ul class="caps">
+        <li>Apache Iceberg</li><li>SQL (data query tool)</li><li>SQL Mesh</li><li>Apache Flink</li><li>ClickHouse Workflows</li>
+      </ul>
+    </div>
+    <div class="col-r">
+      <h2 class="lbl">Crafted by code experts</h2>
+      <p class="copy">Configured for the latest code cloud, CosmoForge pairs with <br class="d">the most capable tools in our industry from SQL to Flink to <br class="d">orchestrate your pipelines.</p>
+    </div>
+    <div class="strip">
+      <h2 class="sr">Works with your stack</h2>
+      <ul>
+        <li><svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="15" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="22" cy="22" r="5" fill="currentColor"/></svg></li>
+        <li><svg viewBox="0 0 44 44" aria-hidden="true"><path d="M22 4 37.6 13v18L22 40 6.4 31V13Z" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linejoin="round"/><path d="M22 15.5 27.6 18.75v6.5L22 28.5 16.4 25.25v-6.5Z" fill="currentColor"/></svg></li>
+        <li><svg viewBox="0 0 44 44" aria-hidden="true"><path d="M8 12h21l7 5H15ZM8 20.5h21l7 5H15ZM8 29h21l7 5H15Z" fill="currentColor"/></svg></li>
+        <li><svg viewBox="0 0 44 44" aria-hidden="true"><path d="M4 17c4.5-6 9-6 13.5 0s9 6 13.5 0 9-6 9-6M4 29c4.5-6 9-6 13.5 0s9 6 13.5 0 9-6 9-6" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="round"/></svg></li>
+        <li><svg viewBox="0 0 44 44" aria-hidden="true"><path d="M6 34V22a16 16 0 0 1 32 0v12Z" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linejoin="round"/><rect x="17" y="24" width="10" height="10" fill="currentColor"/></svg></li>
+        <li><svg viewBox="0 0 44 44" aria-hidden="true"><path d="M22 5 40 38H4Z" fill="currentColor"/><path d="M22 20 30 33H14Z" fill="#000"/></svg></li>
+        <li><svg viewBox="0 0 44 44" aria-hidden="true"><path d="M22 3 41 22 22 41 3 22Z" fill="currentColor"/><path d="M22 13 31 22 22 31 13 22Z" fill="#000"/><circle cx="22" cy="22" r="3.2" fill="currentColor"/></svg></li>
+        <li><svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="16" cy="17" r="10" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="28" cy="17" r="10" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="22" cy="28" r="10" fill="none" stroke="currentColor" stroke-width="4"/></svg></li>
+
+      </ul>
+    </div>
+  </section>
+</main>
+<script>
+/* Remove every entrance-only style as soon as the last movement resolves. */
+(function(){
+  var root=document.documentElement;
+  if(!root.classList.contains('entrance-active'))return;
+  var complete=false,strip=document.querySelector('.strip');
+  function finish(){
+    if(complete)return;
+    complete=true;
+    root.classList.remove('entrance-active');
+    root.classList.add('entrance-complete');
+  }
+  if(strip)strip.addEventListener('animationend',finish,{once:true});
+  window.setTimeout(finish,2600);
+})();
+/* Burger menu for the reflowed header (< 800px). Layout itself is pure CSS. */
+(function(){
+  var top=document.querySelector('.top'),btn=top.querySelector('.menu-btn'),nav=document.getElementById('primary-nav');
+  var mq=window.matchMedia('(max-width: 799.98px)');
+  function set(open,moveFocus){
+    top.classList.toggle('is-open',open);
+    btn.setAttribute('aria-expanded',String(open));
+    btn.setAttribute('aria-label',open?'Close menu':'Open menu');
+    if(open&&moveFocus){var f=nav.querySelector('a');if(f)f.focus();}
+  }
+  var isOpen=function(){return top.classList.contains('is-open');};
+  btn.addEventListener('click',function(){set(!isOpen(),!isOpen());});
+  nav.addEventListener('click',function(e){if(e.target.closest('a')&&mq.matches)set(false);});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&isOpen()){set(false);btn.focus();}});
+  document.addEventListener('pointerdown',function(e){if(isOpen()&&!top.contains(e.target))set(false);});
+  top.addEventListener('focusout',function(e){if(isOpen()&&e.relatedTarget&&!top.contains(e.relatedTarget))set(false);});
+  (mq.addEventListener?mq.addEventListener('change',function(){set(false);}):mq.addListener(function(){set(false);}));
+})();
+/* One-screen fit for the reflowed layouts: if the natural layout is taller than the
+   viewport, scale the layout unit (--fit) down until it fits. Desktop never uses it. */
+(function(){
+  var root=document.documentElement,stage=document.querySelector('.stage');
+  var desk=window.matchMedia('(min-width:1088px) and (min-height:612px) and (min-aspect-ratio:6/5)');
+  var raf=0;
+  function fit(){
+    raf=0;
+    if(desk.matches){root.style.removeProperty('--fit');return;}
+    var vh=root.clientHeight,f=1;
+    root.classList.add('is-measuring');
+    for(var i=0;i<8;i++){
+      root.style.setProperty('--fit',f.toFixed(4));
+      var h=stage.offsetHeight;
+      if(h<=vh)break;
+      f=Math.max(0.5,f*(vh/h)*0.998);
+    }
+    root.classList.remove('is-measuring');
+  }
+  function queue(){if(!raf)raf=requestAnimationFrame(fit);}
+  fit();
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);
+  window.addEventListener('resize',queue);
+  window.addEventListener('orientationchange',queue);
+})();
+</script>
+</body>
+</html>
