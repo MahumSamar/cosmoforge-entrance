@@ -43,7 +43,8 @@ ul{list-style:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 .stage{position:relative;isolation:isolate;overflow:hidden;background:#000}
-.bg{position:absolute;inset:0;z-index:-2;background:url(assets/asteroid.webp) 50% 50%/cover no-repeat;filter:saturate(0.883) brightness(0.890)}
+.bg{position:absolute;inset:0;z-index:-2;overflow:hidden}
+.bg video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 50%;filter:saturate(0.883) brightness(0.890)}
 .scrim{position:absolute;z-index:-1;pointer-events:none}
 
 .brand{display:flex;align-items:center;font-family:var(--sans);font-weight:500;color:#F4F4F4}
@@ -149,7 +150,7 @@ h1{font-family:var(--sans);font-weight:600;color:#F6F6F6;letter-spacing:0}
   br.d{display:none}
   .stage{overflow:visible;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;
     padding:calc(env(safe-area-inset-top,0px) + calc(15.4*var(--u))) calc(env(safe-area-inset-right,0px) + var(--gutter)) calc(env(safe-area-inset-bottom,0px) + calc(7.4*var(--u))) calc(env(safe-area-inset-left,0px) + var(--gutter))}
-  .bg{background-position:50% 50%}
+  .bg video{object-position:50% 50%}
   .s-top,.s-bot,.s-right{display:none}
   .s-flow{inset:0;background:linear-gradient(180deg,rgba(0,0,0,.5) 0%,rgba(0,0,0,.18) 30%,rgba(0,0,0,.42) 58%,rgba(0,0,0,.78) 100%)}
 
@@ -221,7 +222,7 @@ h1{font-family:var(--sans);font-weight:600;color:#F6F6F6;letter-spacing:0}
   }
 }
 @media not all and (min-width:1088px) and (min-height:612px) and (min-aspect-ratio:6/5){
-  @media (orientation:portrait){.bg{background-position:38% 30%}}
+  @media (orientation:portrait){.bg video{object-position:38% 30%}}
 
   /* Nav collapse: logo (calc(175*var(--u))) + calc(40*var(--u)) air + nav (calc(531*var(--u))) + margins stop fitting below calc(800*var(--u)) */
   @media (max-width:799.98px){
@@ -307,7 +308,9 @@ html.entrance-active .strip{animation:cf-strip-in .92s cubic-bezier(.16,1,.3,1) 
 </head>
 <body>
 <main class="stage">
-  <div class="bg" role="img" aria-label="Close-up of a cratered asteroid lit from the upper left"></div>
+  <div class="bg">
+    <video autoplay muted loop playsinline preload="auto" aria-label="Close-up of a cratered asteroid lit from the upper left" src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20261005_174057_ecc76d31-6aaf-408e-81f3-82887f83ed60.mp4"></video>
+  </div>
   <div class="scrim s-top"></div><div class="scrim s-bot"></div><div class="scrim s-right"></div><div class="scrim s-flow"></div>
 
   <header class="top">
